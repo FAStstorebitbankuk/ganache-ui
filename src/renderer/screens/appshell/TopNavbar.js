@@ -19,6 +19,7 @@ import OnlyIf from "../../components/only-if/OnlyIf";
 import StatusIndicator from "../../components/status-indicator/StatusIndicator";
 import UpdateNotification from "../auto-update/UpdateNotification";
 
+import WarningIcon from "../../icons/warning.svg";
 import AccountIcon from "../../icons/account.svg";
 import BlockIcon from "../../icons/blocks.svg";
 import TxIcon from "../../icons/transactions.svg";
@@ -87,7 +88,7 @@ class TopNavbar extends Component {
           setUpdateAvailable(
             "9.9.9",
             "Release Name",
-            "This is a release note.\n\n**bold** _italic_ or is this *italic*? [trufflesuite/ganache-cli#417](https://github.com/trufflesuite/ganache-cli/issues/417)\n\nDo we scroll to get here?\n\nHow about here?",
+            "This is a release note.\n\n**bold** _italic_ or is this *italic*? [trufflesuite/ganache-ui#417](https://github.com/trufflesuite/ganache-ui/issues/417)\n\nDo we scroll to get here?\n\nHow about here?",
           ),
         );
       } else if (value.toLowerCase() === "modal_error") {
@@ -231,7 +232,18 @@ class TopNavbar extends Component {
             <StatusIndicator
               title="WORKSPACE"
               value={this.props.config.settings.workspace.name}
-            />
+            >
+              <OnlyIf test={this.props.config.settings.workspace.libVersion === 2}>
+                <span className="popover-container">
+                  <span className="popover popunder">
+                    This workspace was created with an old version of Ganache.
+                    <br />
+                    Create a new workspace to take advantage of Ganache v7.
+                  </span>
+                  <WarningIcon width="25px" height="25px" />
+                </span>
+              </OnlyIf>
+            </StatusIndicator>
             <OnlyIf test={this.props.config.settings.workspace.isDefault}>
               <button onClick={this.handleSaveWorkspacePress.bind(this)}>Save</button>
             </OnlyIf>

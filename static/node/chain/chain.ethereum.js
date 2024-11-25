@@ -1,9 +1,6 @@
 #!/usr/bin/env node
 
 const ganacheLib = require("ganache");
-const Filecoin = require("@ganache/filecoin");
-const FilecoinProvider = Filecoin.Provider;
-const StorageDealStatus = Filecoin.StorageDealStatus;
 const logging = require("./logging");
 
 if (!process.send) {
@@ -14,12 +11,12 @@ if (!process.send) {
 // remove the uncaughtException listener added by ganache-cli
 process.removeAllListeners("uncaughtException");
 
-process.on("unhandledRejection", err => {
+process.on("unhandledRejection", (err) => {
   //console.log('unhandled rejection:', err.stack || err)
   process.send({ type: "error", data: copyErrorFields(err) });
 });
 
-process.on("uncaughtException", err => {
+process.on("uncaughtException", (err) => {
   //console.log('uncaught exception:', err.stack || err)
   process.send({ type: "error", data: copyErrorFields(err) });
 });
@@ -79,7 +76,7 @@ async function startServer(options) {
       logging.generateLogFilePath(options.logDirectory);
 
       options.logging.logger = {
-        log: message => {
+        log: (message) => {
           if (typeof message === "string") {
             logging.logToFile(message);
           }
@@ -87,7 +84,7 @@ async function startServer(options) {
       };
     } else {
       options.logging.logger = {
-        log: message => {
+        log: (message) => {
           if (typeof message === "string") {
             console.log(message);
           }
@@ -97,18 +94,31 @@ async function startServer(options) {
   }
 
   // log startup options without logging user's mnemonic
-  const startingMessage = `Starting server with initial configuration: ${JSON.stringify(sanitizedOptions)}`;
+  const startingMessage = `Starting server with initial configuration: ${JSON.stringify(
+    sanitizedOptions
+  )}`;
   console.log(startingMessage);
   if (logToFile) {
     logging.logToFile(startingMessage);
   }
 
+  options.wallet = options.wallet || {};
   server = ganacheLib.server(options);
 
   try {
     await server.listen(options.port, options.hostname);
   } catch (err) {
-    process.send({ type: "start-error", data: {code: err.code, stack: err.stack, message: err.message} });
+    const { message, stack } = err;
+    let { code } = err;
+    // todo: we may be able to remove this check once https://github.com/trufflesuite/ganache/issues/4020 is resolved
+    if (code === undefined && message && message.startsWith("listen EADDRINUSE")) {
+      code = "EADDRINUSE";
+    }
+
+    process.send({
+      type: "start-error",
+      data: { code, stack, message },
+    });
     return;
   }
 
@@ -128,8 +138,6 @@ async function startServer(options) {
     oldSend(payload, callback);
   };
 
-  dbLocation = server.provider.blockchain.dbDirectory;
-
   const privateKeys = {};
 
   const accounts = await server.provider.getInitialAccounts();
@@ -139,15 +147,22 @@ async function startServer(options) {
     privateKeys[address] = accounts[address].secretKey;
   });
 
-  const data = Object.assign({}, server.provider.getOptions());
+  const ganacheOptions = server.provider.getOptions();
 
-  data.privateKeys = privateKeys;
-  data.schema = FilecoinProvider.Schema;
+  dbLocation = ganacheOptions.database.dbPath;
 
-  // We inject this enum from the `main` process to not
-  // have to deal with webpacking @ganache/filecoin into
-  // the renderer process
-  data.StorageDealStatus = StorageDealStatus;
+  const { mnemonic, hdPath } = ganacheOptions.wallet;
+  const fork_block_number = ganacheOptions.fork?.blockNumber;
+
+  // todo: what else do we need from options
+  const data = {
+    privateKeys,
+    addresses,
+    hdPath,
+    mnemonic,
+    fork_block_number,
+    dbLocation,
+  };
 
   process.send({ type: "server-started", data: data });
 

@@ -30,28 +30,27 @@ class IntegrationManager extends EventEmitter {
   }
 
   async setWorkspace(name, flavor) {
-    await this._setFlavor(flavor);
-    this.workspace = this.workspaceManager.get(name, flavor);
+    const desiredWorkspace = this.workspaceManager.get(name, flavor);
+    if (desiredWorkspace == undefined) {
+      throw new Error("Workspace not found");
+    }
+    this.workspace = null;
+    await this.stopChain();
+    this.startChainWithWorkspace(flavor, desiredWorkspace);
   }
 
-  async _setFlavor(flavor) {
+  async startChainWithWorkspace(flavor, workspace) {
     const integrations = this.integrations;
     if (Object.prototype.hasOwnProperty.call(integrations, flavor)) {
-      if (this.flavor) {
-        // We're *not* switching chains, so don't need to do anything.
-        if (this.flavor.name === flavor) return;
-
-        // We're switching chains; invalid the previous workspace and then
-        // shut down the old chain completely
-        this.workspace = null;
-        await this.stopChain();
-      }
-
-      const integration = this.flavor = new integrations[flavor](this);
+      const integration = (this.flavor = new integrations[flavor](
+        this,
+        workspace
+      ));
       integration.name = flavor;
       integration.on("message", (...args) => {
         this.emit.apply(this, args);
       });
+      this.workspace = workspace;
       await this.startChain();
     } else {
       throw new Error("Invalid flavor: " + flavor);
@@ -72,11 +71,11 @@ class IntegrationManager extends EventEmitter {
       chaindataLocation,
       this.workspaceManager.directory,
       mnemonic,
-      true
+      // we persist this workspace in the /Quickstart directory, and will move
+      // it to the correct location in workspaceManager.enumerateWorkspaces()
+      false
     );
-
     await this.setWorkspace(workspaceName, workspace.flavor);
-
     this.emit("server-started");
   }
 
@@ -98,8 +97,7 @@ class IntegrationManager extends EventEmitter {
       try {
         await this.flavor.startServer(settings, this.workspace.workspaceDirectory);
         // just incase startServer mutates the settings, save them
-        // todo: not sure whether we still need to do this?
-        this.workspace.settings.setAll(settings);
+        this.workspace.settings.setAll(this.workspace.settings.getAll());
 
         this.emit("server-started");
         return true;

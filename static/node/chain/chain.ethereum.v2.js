@@ -19,6 +19,7 @@ process.on("unhandledRejection", err => {
 
 process.on("uncaughtException", err => {
   //console.log('uncaught exception:', err.stack || err)
+  // hilariously EADDRINUSE errors will get raised here
   process.send({ type: "error", data: copyErrorFields(err) });
 });
 
@@ -42,7 +43,7 @@ async function stopServer() {
         }
         else resolve();
       });
-    })
+    });
   } else {
     process.send({ type: "server-stopped" });
   }
@@ -50,7 +51,6 @@ async function stopServer() {
 
 async function startServer(options) {
   await stopServer();
-  
   let sanitizedOptions = Object.assign({}, options);
   delete sanitizedOptions.mnemonic;
 

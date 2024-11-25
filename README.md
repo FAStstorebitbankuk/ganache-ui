@@ -12,9 +12,9 @@ Ganache is your personal blockchain for Ethereum development.
 
 ### Getting started
 
-You can download a self-contained prebuilt Ganache binary for your platform of choice using the "Download" button on the [Ganache](https://trufflesuite.com/ganache/) website, or from this repository's [releases](https://github.com/trufflesuite/ganache/releases) page.
+You can download a self-contained prebuilt Ganache binary for your platform of choice using the "Download" button on the [Ganache](https://trufflesuite.com/ganache/) website, or from this repository's [releases](https://github.com/trufflesuite/ganache-ui/releases) page.
 
-Ganache is also available as a command-line tool. If you prefer working on the command-line, check out [ganache-cli](https://github.com/trufflesuite/ganache-cli).
+Ganache is also available as a command-line tool. If you prefer working on the command-line, check out the [ganache CLI](https://github.com/trufflesuite/ganache).
 
 ### Contributing
 
@@ -48,6 +48,16 @@ In order to build on Windows, you must first ensure you have the [Windows 10 SDK
 
 Because Windows requires a certificate to build the package -- and that certificate requires a password -- you'll need to run the following command instead of `npm run make`:
 
+In order to successfully sign the appx bundle on Windows 10, an alternative `signtool.exe` to the binary bundled with electron-builder may need to be used. See https://github.com/electron-userland/electron-builder/pull/6817. 
+
+Install Windows SDK 18362 from https://developer.microsoft.com/en-us/windows/downloads/sdk-archive, and set the signtool path for electron-builder as follows:
+
+```
+$env:SIGNTOOL_PATH='C:\Program Files (x86)\Windows Kits\10\bin\10.0.18362.0\x64\signtool.exe'
+```
+
+note: Newer versions of the SDK may not work, as the default value for the `/fd` (file digest) argument was no longer supported (electron will exclude the argument if digest is `SHA1` [the default] when spawning `signtool.exe`, see https://github.com/electron-userland/electron-builder/blob/aeffe080e07f11057134947e09021cd9d6712935/packages/app-builder-lib/src/codeSign/windowsCodeSign.ts#L232). While older versions do not support the `SIGNTOOL_PATH` environment variable.
+
 ```
 $ CERT_PASS="..." npm run build-windows
 ```
@@ -70,7 +80,7 @@ This will create a signed `.dmg` file in `./out/make`.
 
 #### On Linux:
 
-Bulding on Linux will create a `.AppImage` file, meant to run on many versions of Linux.
+Building on Linux will create a `.AppImage` file, meant to run on many versions of Linux.
 
 Linux requires no signing keys, so there's no set up. Simply run the following command:
 
@@ -95,11 +105,11 @@ Note from the author: I found managing these assets manually -- especially the a
 
 ### Flavored Development
 
-"Extras" aren't stored here in this repository fordue to file size issues, licensing issues, or both.
+"Extras" aren't stored here in this repository due to file size issues, licensing issues, or both.
 
 Non-ethereum "flavored" Ganache extras are uploaded to releases here: https://github.com/trufflesuite/ganache-flavors/releases
 
-When "extras" change they should be uploaded to a new release, and a corresonding Ganache release that targets the new ganache-flavors release (see `common/extras/index.js` for what you'dd need to update)
+When "extras" change they should be uploaded to a new release, and a corresponding Ganache release that targets the new ganache-flavors release (see `common/extras/index.js` for what you'd need to update)
 
 ### VS Code Debugging
 

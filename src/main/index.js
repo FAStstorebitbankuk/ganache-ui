@@ -16,7 +16,7 @@ import {
   ipcMain,
   screen,
   clipboard,
-} from "electron"
+} from "electron";
 import { initAutoUpdates, getAutoUpdateService } from "./init/AutoUpdate.js";
 import {
   REQUEST_SERVER_RESTART,
@@ -80,7 +80,7 @@ if (isDevelopment) {
   app.commandLine.appendSwitch("remote-debugging-port", "9222");
 }
 
-const USERDATA_PATH = app.getPath("userData");
+const USERDATA_PATH = path.join(app.getPath("userData"), "/ui");
 let migrationPromise;
 
 if (process.platform === "win32") {
@@ -93,16 +93,16 @@ if (process.platform === "win32") {
   // context.
   // eslint-disable-next-line no-console
   let userDataPromise = spawn("cmd.exe", ["/c", "mkdir", USERDATA_PATH])
-    .then(()=> {
+    .then(() => {
       return spawn("cmd.exe", ["/c", "mkdir", path.join(USERDATA_PATH, "extras")])
     })
-    .then(()=> {
+    .then(() => {
       return spawn("cmd.exe", ["/c", "mkdir", path.join(USERDATA_PATH, "workspaces")])
     })
-    .then(()=> {
+    .then(() => {
       return spawn("cmd.exe", ["/c", "mkdir", path.join(USERDATA_PATH, "default")])
     })
-    .then(()=> {
+    .then(() => {
       return spawn("cmd.exe", ["/c", "mkdir", path.join(USERDATA_PATH, "global")])
     })
     .catch(e => { console.error(e) });
@@ -120,7 +120,7 @@ if (process.platform === "win32") {
     }
   });
 } else {
-  migrationPromise = Promise.resolve();
+  migrationPromise = migration.migrate(USERDATA_PATH);
 
   // https://github.com/sindresorhus/fix-path
   // GUI apps on macOS don't inherit the $PATH defined in your dotfiles (.bashrc/.bash_profile/.zshrc/etc)
@@ -162,7 +162,7 @@ app.on('ready', async () => {
   const integrations = new IntegrationManager(USERDATA_PATH, ipcMain, isDevMode);
   // allow integrations to communicate with the mainWindow by emitting a
   // `"send"` event
-  integrations.on("send", function(){
+  integrations.on("send", function () {
     if (mainWindow) {
       const webContents = mainWindow.webContents;
       if (webContents) {
@@ -170,7 +170,7 @@ app.on('ready', async () => {
       }
     }
   });
-  integrations.on("progress", function(message, minDuration = null) {
+  integrations.on("progress", function (message, minDuration = null) {
     mainWindow.webContents.send(SET_PROGRESS, message, minDuration);
     addLogLines(message + "\n");
   });
@@ -209,7 +209,11 @@ app.on('ready', async () => {
     callback(true);
   });
 
+  require('@electron/remote/main').initialize();
+
+
   mainWindow = new BrowserWindow({
+    enableRemoteModule: true,
     show: false,
     minWidth: 950,
     minHeight: 670,
@@ -223,6 +227,7 @@ app.on('ready', async () => {
       enableRemoteModule: true
     }
   });
+  require("@electron/remote/main").enable(mainWindow.webContents)
 
   if (isDevelopment) {
     mainWindow.loadURL(`http://localhost:${process.env.ELECTRON_WEBPACK_WDS_PORT}`);
@@ -244,7 +249,7 @@ app.on('ready', async () => {
 
   // if a user clicks a link to an external webpage, open it in the user's browser, not our app
   mainWindow.webContents.on("new-window", ensureExternalLinksAreOpenedInBrowser);
-  mainWindow.webContents.on("will-navigate",ensureExternalLinksAreOpenedInBrowser);
+  mainWindow.webContents.on("will-navigate", ensureExternalLinksAreOpenedInBrowser);
 
   // handle right click:
   mainWindow.webContents.on("context-menu", (_e, props) => {
@@ -361,7 +366,9 @@ app.on('ready', async () => {
     });
 
     integrations.on("start-error", err => {
-      err.code = "CUSTOMERROR";
+      if (err.code === undefined) {
+        err.code = "CUSTOMERROR";
+      }
       err.key = "workspace.server.chain";
       err.value = err.message + "\n\n" + err.stack;
       err.tab = "server";
@@ -447,12 +454,29 @@ app.on('ready', async () => {
 
     let projects = [];
     if (workspace.name === null) {
+      const randomizeMnemonicOnStart = workspace.settings.get("randomizeMnemonicOnStart");
+      workspace.saveAs(
+        "Quickstart",
+        null,
+        workspaceManager.directory,
+        null,
+        true,
+      );
+      // this loads the default workspace
+      workspaceManager.bootstrap();
+      // saveAs overwrites these values, so we need to put them back
+      workspace.settings.set("isDefault", true);
+      workspace.settings.set("randomizeMnemonicOnStart", randomizeMnemonicOnStart);
+
       // default workspace shouldn't have pre-existing projects
       // this logic only should get called when the user presses
       // the default workspace button. the restart after loading
       // the projects should trigger the REQUEST_SERVER_RESTART
       // logic
       workspace.settings.set("projects", []);
+
+      await integrations.setWorkspace("Quickstart", flavor);
+      workspace = integrations.workspace;
 
       workspace.resetChaindata();
     } else {
@@ -485,7 +509,7 @@ app.on('ready', async () => {
     );
 
     startupMode = STARTUP_MODE.NORMAL;
-    if (await integrations.startServer()){
+    if (await integrations.startServer()) {
       // this sends the network interfaces to the renderer process for
       //  enumering in the config screen. it sends repeatedly
       continuouslySendNetworkInterfaces();
@@ -536,22 +560,15 @@ app.on('ready', async () => {
       workspace.contractCache.getAll(),
     );
 
-    if (flavor === "ethereum") {
-      await integrations.startChain();
-      if (!(await integrations.startServer())) {
-        return;
-      }
-    } else {
-      if (workspace) {
-        const globalSettings = global.getAll();
-        const workspaceSettings = workspace.settings.getAll();
-        mainWindow.webContents.send(
-          SET_SERVER_STARTED,
-          globalSettings,
-          workspaceSettings,
-          startupMode,
-        );
-      }
+    if (workspace) {
+      const globalSettings = global.getAll();
+      const workspaceSettings = workspace.settings.getAll();
+      mainWindow.webContents.send(
+        SET_SERVER_STARTED,
+        globalSettings,
+        workspaceSettings,
+        startupMode,
+      );
     }
 
     // this sends the network interfaces to the renderer process for
@@ -627,7 +644,7 @@ app.on('ready', async () => {
 
       startupMode = STARTUP_MODE.NORMAL;
 
-      if (await integrations.startServer()){
+      if (await integrations.startServer()) {
         // send the interfaces again once on restart
         sendNetworkInterfaces();
       }
